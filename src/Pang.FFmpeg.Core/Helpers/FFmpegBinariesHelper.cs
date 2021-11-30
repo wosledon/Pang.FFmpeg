@@ -33,7 +33,7 @@ namespace Pang.FFmpeg.Core.Helpers
                 case PlatformID.Unix:
                 case PlatformID.MacOSX:
                     var libraryPath = Environment.GetEnvironmentVariable(LD_LIBRARY_PATH);
-                    RegisterLibrariesSearchPath(libraryPath);
+                    if (libraryPath != null) RegisterLibrariesSearchPath(libraryPath);
                     break;
             }
         }
