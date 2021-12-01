@@ -13,7 +13,7 @@ namespace Pang.FFmpeg.Core.AudioEncoder
         }
 
         /// <summary>
-        /// 检查采用格式
+        /// 检查采样格式
         /// </summary>
         /// <param name="codec">        </param>
         /// <param name="sampleFormat"> </param>
@@ -33,7 +33,7 @@ namespace Pang.FFmpeg.Core.AudioEncoder
         }
 
         /// <summary>
-        /// 选择采样率吧
+        /// 选择采样率
         /// </summary>
         /// <param name="codec"> 编码器 </param>
         /// <returns> </returns>
@@ -114,8 +114,8 @@ namespace Pang.FFmpeg.Core.AudioEncoder
                     return;
                 else if (error < 0)
                 {
-                    Console.WriteLine(@"Error encoding audio frame.");
-                    error.ThrowExceptionIfError();
+                    //Console.WriteLine(@"Error encoding audio frame.");
+                    error.ThrowExceptionIfError(@"Error encoding audio frame.");
                 }
 
                 // 追加数据
