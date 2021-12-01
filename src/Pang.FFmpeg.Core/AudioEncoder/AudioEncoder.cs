@@ -6,10 +6,88 @@ using Pang.FFmpeg.Core.Helpers;
 
 namespace Pang.FFmpeg.Core.AudioEncoder
 {
-    public sealed unsafe class AudioFileEncoder
+    public sealed unsafe class AudioEncoder
     {
-        public AudioFileEncoder()
+        public AudioEncoder()
         {
+        }
+
+        /// <summary>
+        /// 检查采用格式
+        /// </summary>
+        /// <param name="codec">        </param>
+        /// <param name="sampleFormat"> </param>
+        /// <returns> </returns>
+        public static bool CheckSampleFormat(AVCodec* codec, AVSampleFormat sampleFormat)
+        {
+            AVSampleFormat* p = codec->sample_fmts;
+
+            while (*p != AVSampleFormat.AV_SAMPLE_FMT_NONE)
+            {
+                if (*p == sampleFormat)
+                    return true;
+                p++;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 选择采样率吧
+        /// </summary>
+        /// <param name="codec"> 编码器 </param>
+        /// <returns> </returns>
+        /// <remarks> 选择支持的最高采样率 </remarks>
+        public static int SelectSampleRate(AVCodec* codec)
+        {
+            int* p;
+            int bestSampleRate = 0;
+
+            if (codec->supported_samplerates is null)
+                return 44100;
+
+            p = codec->supported_samplerates;
+            while (*p != 0)
+            {
+                if (bestSampleRate == 0 || Math.Abs(44100 - *p) < Math.Abs(44100 - bestSampleRate))
+                    bestSampleRate = *p;
+                p++;
+            }
+
+            return bestSampleRate;
+        }
+
+        /// <summary>
+        /// 选择通道布局
+        /// </summary>
+        /// <param name="codec"> </param>
+        /// <returns> </returns>
+        /// <remarks> 选择最高支持的通道数 </remarks>
+        public static ulong SelectChannelLayout(AVCodec* codec)
+        {
+            ulong* p;
+            ulong bestChLayout = 0;
+            int bestNbChannels = 0;
+
+            if (codec->channel_layouts is null)
+            {
+                return ffmpeg.AV_CH_LAYOUT_STEREO;
+            }
+
+            p = codec->channel_layouts;
+            while (*p != 0)
+            {
+                int nbChannels = ffmpeg.av_get_channel_layout_nb_channels(*p);
+
+                if (nbChannels > bestNbChannels)
+                {
+                    bestChLayout = *p;
+                    bestNbChannels = nbChannels;
+                }
+                p++;
+            }
+
+            return bestChLayout;
         }
 
         /// <summary>

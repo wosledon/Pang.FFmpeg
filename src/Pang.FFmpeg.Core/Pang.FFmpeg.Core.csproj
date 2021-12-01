@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="AudioEncoder\" />
     <Folder Include="VideoEncoder\" />
     <Folder Include="AudoDecoder\" />
     <Folder Include="VideoDecoder\" />
