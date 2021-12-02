@@ -2,6 +2,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Pang.FFmpeg.Core.Helpers;
 
+
+#pragma warning disable
 namespace Pang.FFmpeg.Core.Extensions
 {
     public static class FFmpegExtension
