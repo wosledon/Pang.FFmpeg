@@ -6,31 +6,36 @@ using Pang.FFmpeg.Core.Helpers;
 
 namespace Pang.FFmpeg.Core.AudioEncoder
 {
-    public sealed unsafe class Mp2AudioEncoder : IDisposable
+    public sealed unsafe class AccAudioEncoder : IDisposable
     {
         private AVCodecContext* pCodecContext = null;
         private AVCodec* pCodec;
+        private SwrContext* pSwrContext;
 
         private AVFrame* pFrame;
         private AVPacket* pPacket;
 
         public string FileName { get; }
+        public int SampleRate { get; }
         public long BitRate { get; }
         public AVSampleFormat DestinationSampleFormat { get; }
+        public AVSampleFormat SourceSampleFormat { get; }
 
         public FileStream Fs { get; }
 
         public string FilePath
         {
-            get => Directory.GetCurrentDirectory() + $"/{FileName}.mp2";
+            get => Directory.GetCurrentDirectory() + $"/{FileName}.aac";
         }
 
         public int Error { get; set; }
 
-        public Mp2AudioEncoder(string fileName, long bitRate = 64000, AVSampleFormat destinationSampleFormat = AVSampleFormat.AV_SAMPLE_FMT_S16)
+        public AccAudioEncoder(string fileName, int sampleRate = 8000, long bitRate = 64000, AVSampleFormat sourceSampleFormat = AVSampleFormat.AV_SAMPLE_FMT_S16, AVSampleFormat destinationSampleFormat = AVSampleFormat.AV_SAMPLE_FMT_FLTP)
         {
             FileName = string.IsNullOrEmpty(fileName) ? Guid.NewGuid().ToString() : fileName;
+            SampleRate = sampleRate;
             BitRate = bitRate;
+            SourceSampleFormat = sourceSampleFormat;
             DestinationSampleFormat = destinationSampleFormat;
 
             // 找到MP2编码器
@@ -60,6 +65,14 @@ namespace Pang.FFmpeg.Core.AudioEncoder
             Error = ffmpeg.avcodec_open2(pCodecContext, pCodec, null)
                 .ThrowExceptionIfError(@"Could not open codec.");
 
+            pSwrContext = ffmpeg.swr_alloc();
+
+            pSwrContext = ffmpeg.swr_alloc_set_opts(pSwrContext, (long)pCodecContext->channel_layout, pCodecContext->sample_fmt,
+                pCodecContext->sample_rate,
+                (long)pCodecContext->channel_layout, SourceSampleFormat, SampleRate, 0, null);
+
+            ffmpeg.swr_init(pSwrContext).ThrowExceptionIfError(@"PCM压缩为ACC格式");
+
             // 追加数据文件
             Fs = new FileStream(FilePath, FileMode.Append);
 
@@ -74,26 +87,38 @@ namespace Pang.FFmpeg.Core.AudioEncoder
 
         public void Encode()
         {
-            var t = 0;
-            var tincr = 2 * Math.PI * 440.0 / pCodecContext->sample_rate;
-            for (var i = 0; i < 200; i++)
-            {
-                ffmpeg.av_frame_make_writable(pFrame).ThrowExceptionIfError();
+            #region 官网示例
 
-                var samples = (ulong*)pFrame->data[0];
+            //var t = 0;
+            //var tincr = 2 * Math.PI * 440.0 / pCodecContext->sample_rate;
+            //for (var i = 0; i < 200; i++)
+            //{
+            //    ffmpeg.av_frame_make_writable(pFrame).ThrowExceptionIfError();
 
-                for (var j = 0; j < pCodecContext->frame_size; j++)
-                {
-                    samples[2 * j] = (ulong)(Math.Sin(t) * 10000);
+            // var samples = (ulong*)pFrame->data[0];
 
-                    for (var k = 0; k < pCodecContext->channels; k++)
-                    {
-                        samples[2 * j + k] = samples[2 * j];
-                    }
+            // for (var j = 0; j < pCodecContext->frame_size; j++) { samples[2 * j] =
+            // (ulong)(Math.Sin(t) * 10000);
 
-                    t += (int)tincr;
-                }
-            }
+            // for (var k = 0; k < pCodecContext->channels; k++) { samples[2 * j + k] = samples[2 *
+            // j]; }
+
+            //        t += (int)tincr;
+            //    }
+            //}
+
+            #endregion 官网示例
+
+            pFrame->channels = pCodecContext->channels;
+            pFrame->format = (int)pCodecContext->sample_fmt;
+            pFrame->nb_samples = pCodecContext->frame_size;
+
+            // 从文件中读取原始数据
+            int size = ffmpeg.av_samples_get_buffer_size(null, pCodecContext->channels, pCodecContext->frame_size,
+                pCodecContext->sample_fmt, 1);
+
+            byte* outBuffer = (byte*)ffmpeg.av_malloc((ulong)size);
+            ffmpeg.avcodec_fill_audio_frame(pFrame, pCodecContext->channels, pCodecContext->sample_fmt, outBuffer, size, 1);
         }
 
         public void Dispose()
@@ -106,6 +131,8 @@ namespace Pang.FFmpeg.Core.AudioEncoder
 
             var codecContext = pCodecContext;
             ffmpeg.avcodec_free_context(&codecContext);
+
+            ffmpeg.av_free(pSwrContext);
         }
     }
 }
