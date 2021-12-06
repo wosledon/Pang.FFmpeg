@@ -18,10 +18,13 @@ namespace Pang.FFmpeg.Core.AudioEncoder
         public string FileName { get; }
         public int SampleRate { get; }
         public long BitRate { get; }
+        public int Channels { get; }
         public AVSampleFormat DestinationSampleFormat { get; }
         public AVSampleFormat SourceSampleFormat { get; }
 
         public FileStream Fs { get; }
+
+        private AudioEncoder audioEncoder;
 
         public string FilePath
         {
@@ -30,11 +33,17 @@ namespace Pang.FFmpeg.Core.AudioEncoder
 
         public int Error { get; set; }
 
-        public AccAudioEncoder(string fileName, int sampleRate = 8000, long bitRate = 64000, AVSampleFormat sourceSampleFormat = AVSampleFormat.AV_SAMPLE_FMT_S16, AVSampleFormat destinationSampleFormat = AVSampleFormat.AV_SAMPLE_FMT_FLTP)
+        ulong sourceChannelLayout = ffmpeg.AV_CH_LAYOUT_MONO;
+        ulong destinationChannelLayout = ffmpeg.AV_CH_LAYOUT_STEREO;
+
+        public AccAudioEncoder(string fileName, int sampleRate = 8000, long bitRate = 16, int channels = 1, AVSampleFormat sourceSampleFormat = AVSampleFormat.AV_SAMPLE_FMT_S16, AVSampleFormat destinationSampleFormat = AVSampleFormat.AV_SAMPLE_FMT_FLTP)
         {
+            audioEncoder = new AudioEncoder();
+
             FileName = string.IsNullOrEmpty(fileName) ? Guid.NewGuid().ToString() : fileName;
             SampleRate = sampleRate;
             BitRate = bitRate;
+            Channels = channels;
             SourceSampleFormat = sourceSampleFormat;
             DestinationSampleFormat = destinationSampleFormat;
 
@@ -85,8 +94,13 @@ namespace Pang.FFmpeg.Core.AudioEncoder
             ffmpeg.av_frame_get_buffer(pFrame, 0).ThrowExceptionIfError(@"Could not allocate audio data buffers.");
         }
 
-        public void Encode()
+        public void Encode(byte[] input, out byte[] output)
         {
+            output = Array.Empty<byte>();
+
+            byte** sourceData;
+            byte** destinationData;
+
             #region 官网示例
 
             //var t = 0;
@@ -113,12 +127,29 @@ namespace Pang.FFmpeg.Core.AudioEncoder
             pFrame->format = (int)pCodecContext->sample_fmt;
             pFrame->nb_samples = pCodecContext->frame_size;
 
+            int sourceLineSize;
+            // 单声道
+            int sourceChannelsCount = ffmpeg.av_get_channel_layout_nb_channels(sourceChannelLayout);
+
+            // ffmpeg.av_samples_alloc_array_and_samples(&sourceData, &sourceLineSize,
+            //     sourceChannelsCount, SourceSampleFormat, 0);
+
+
+
+            // // 转码
+            // ffmpeg.swr_convert(pSwrContext, 0, pCodecContext->frame_size, 0, pFrame->nb_samples);
+
             // 从文件中读取原始数据
             int size = ffmpeg.av_samples_get_buffer_size(null, pCodecContext->channels, pCodecContext->frame_size,
                 pCodecContext->sample_fmt, 1);
 
+            // 分配空间
+            ffmpeg.av_frame_get_buffer(pFrame, 0).ThrowExceptionIfError("Could not allocate frame.");
+
             byte* outBuffer = (byte*)ffmpeg.av_malloc((ulong)size);
             ffmpeg.avcodec_fill_audio_frame(pFrame, pCodecContext->channels, pCodecContext->sample_fmt, outBuffer, size, 1);
+
+            audioEncoder.Encode(pCodecContext, pFrame, pPacket, Fs);
         }
 
         public void Dispose()
