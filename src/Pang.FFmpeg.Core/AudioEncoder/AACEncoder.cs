@@ -58,6 +58,8 @@ namespace Pang.FFmpeg.Core.AudioEncoder
         private AVFrame* _pFrame;
         private AVPacket* _pPacket;
 
+        private AudioEncoder AudioEncoder { get; } = new AudioEncoder();
+
         public AACEncoder(int sampleRate = 8000, int bitRate = 64000, int channels = 1, AVSampleFormat sampleFormat = AVSampleFormat.AV_SAMPLE_FMT_S32)
         {
             SampleRate = sampleRate;
@@ -145,29 +147,138 @@ namespace Pang.FFmpeg.Core.AudioEncoder
 
         public void Encode(byte[] input)
         {
-            IntPtr pcmBuffer = Marshal.AllocHGlobal(FrameBytes);
-            if (pcmBuffer == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("Pcm buffer malloc failed.");
-            }
+            int Error;
 
-            Marshal.Copy(pcmBuffer, input, 0, FrameBytes);
+            //IntPtr pcmBuffer = Marshal.AllocHGlobal(FrameBytes);
+            //if (pcmBuffer == IntPtr.Zero)
+            //{
+            //    throw new InvalidOperationException("Pcm buffer malloc failed.");
+            //}
 
-            IntPtr pcmTempBuffer = Marshal.AllocHGlobal(FrameBytes);
-            if (pcmTempBuffer == IntPtr.Zero)
-            {
-                throw new InvalidOperationException(@"Pcm temp buffer malloc failed.");
-            }
+            //Marshal.Copy(pcmBuffer, input, 0, FrameBytes);
+
+            //IntPtr pcmTempBuffer = Marshal.AllocHGlobal(FrameBytes);
+            //if (pcmTempBuffer == IntPtr.Zero)
+            //{
+            //    throw new InvalidOperationException(@"Pcm temp buffer malloc failed.");
+            //}
 
             ffmpeg.av_frame_make_writable(_pFrame)
                 .ThrowExceptionIfError("av_frame_make_writable failed");
 
-            if (AVSampleFormat.AV_SAMPLE_FMT_S16 == (AVSampleFormat)_pFrame->format)
+            byte** sourceData = null;
+            byte** destinationData = null;
+
+            int sourceLineSize;
+            int sourceChannelsCount = ffmpeg.av_get_channel_layout_nb_channels(ffmpeg.AV_CH_LAYOUT_MONO);
+            ffmpeg.av_samples_alloc_array_and_samples(&sourceData, &sourceLineSize, sourceChannelsCount,
+                _pFrame->nb_samples, InputSampleFormat, 0)
+                .ThrowExceptionIfError(@"Could not allocate source samples.");
+
+            int destinationSampleCount =
+                (int)ffmpeg.av_rescale_rnd(_pFrame->nb_samples, _pFrame->sample_rate, SampleRate,
+                    AVRounding.AV_ROUND_UP);
+            int maxDestinationSampleCount = destinationSampleCount;
+
+            int destinationLineSize;
+            int destinationChannelsCount = ffmpeg.av_get_channel_layout_nb_channels(_pFrame->channel_layout);
+            ffmpeg.av_samples_alloc_array_and_samples(&destinationData, &destinationLineSize, destinationChannelsCount,
+                destinationSampleCount, OutputSampleFormat, 0)
+                .ThrowExceptionIfError(@"Could not allocate destination samples");
+
+            double toneLevel = 0;
+            do
             {
-                ffmpeg.av_samples_fill_arrays(IntPtr.)
+                FillSamples((double*)sourceData[0], _pFrame->nb_samples, sourceChannelsCount, SampleRate, &toneLevel);
+
+                destinationSampleCount =
+                    (int)ffmpeg.av_rescale_rnd(
+                        ffmpeg.swr_get_delay(_pSwrContext, SampleRate) + SampleRate, _pFrame->sample_rate,
+                        SampleRate, AVRounding.AV_ROUND_UP);
+
+                if (destinationSampleCount > maxDestinationSampleCount)
+                {
+                    ffmpeg.av_freep(&destinationData[0]);
+
+                    Error = ffmpeg.av_samples_alloc(destinationData, &destinationLineSize, destinationChannelsCount,
+                        destinationSampleCount, OutputSampleFormat, 1);
+
+                    if (Error < 0)
+                        break;
+
+                    maxDestinationSampleCount = destinationSampleCount;
+                }
+
+                Error = ffmpeg.swr_convert(_pSwrContext, destinationData, destinationSampleCount, sourceData,
+                    _pFrame->nb_samples)
+                    .ThrowExceptionIfError(@"Error while converting");
+
+                int destinationBufferSize = ffmpeg.av_samples_get_buffer_size(&destinationLineSize,
+                    destinationChannelsCount,
+                    Error, OutputSampleFormat, 1)
+                    .ThrowExceptionIfError(@"Could not get sample buffer size");
+
+                Console.WriteLine($"t: {toneLevel} in: {_pFrame->nb_samples} out: {Error}");
+
+                AudioEncoder.Encode(pCodecContext: _pCodecContext, _pFrame, _pPacket, null);
+            } while (toneLevel < 10);
+
+            Error = getFormatFromSampleFormat(out var fmt, OutputSampleFormat)
+                .ThrowExceptionIfError();
+            Console.Error.Write("Resampling succeeded. Play the output file with the command:\n"
+                                + $"ffplay -f {fmt} -channel_layout {_pFrame->channel_layout} -channels {destinationChannelsCount} -ar {_pFrame->sample_rate} {"filename"}\n",
+                fmt, _pFrame->channel_layout, destinationChannelsCount, _pFrame->sample_rate, "filename");
+        }
+
+        private struct sample_fmt_entry
+        {
+            public AVSampleFormat sample_fmt;
+            public string fmt_be, fmt_le;
+        }
+
+        private static int getFormatFromSampleFormat(out string fmt, AVSampleFormat sample_fmt)
+        {
+            var sample_fmt_entries = new[]{
+                new sample_fmt_entry{ sample_fmt = AVSampleFormat.AV_SAMPLE_FMT_U8,  fmt_be = "u8",    fmt_le = "u8"    },
+                new sample_fmt_entry{ sample_fmt = AVSampleFormat.AV_SAMPLE_FMT_S16, fmt_be = "s16be", fmt_le = "s16le" },
+                new sample_fmt_entry{ sample_fmt = AVSampleFormat.AV_SAMPLE_FMT_S32, fmt_be = "s32be", fmt_le = "s32le" },
+                new sample_fmt_entry{ sample_fmt = AVSampleFormat.AV_SAMPLE_FMT_FLT, fmt_be = "f32be", fmt_le = "f32le" },
+                new sample_fmt_entry{ sample_fmt = AVSampleFormat.AV_SAMPLE_FMT_DBL, fmt_be = "f64be", fmt_le = "f64le" },
+            };
+            fmt = null;
+            for (var i = 0; i < sample_fmt_entries.Length; i++)
+            {
+                var entry = sample_fmt_entries[i];
+                if (sample_fmt == entry.sample_fmt)
+                {
+                    fmt = ffmpeg.AV_HAVE_BIGENDIAN != 0 ? entry.fmt_be : entry.fmt_le;
+                    return 0;
+                }
             }
-            else
+
+            Console.Error.WriteLine($"Sample format {ffmpeg.av_get_sample_fmt_name(sample_fmt)} not supported as output format");
+            return ffmpeg.AVERROR(ffmpeg.EINVAL);
+        }
+
+        /**
+         * Fill dst buffer with nb_samples, generated starting from t.
+         */
+
+        private static void FillSamples(double* dst, int samplesCount, int channelsCount, int sampleRate, double* toneLevel)
+        {
+            int i, j;
+            double toneIncrement = 1.0 / sampleRate;
+            double* dstp = dst;
+            const double c = 2 * Math.PI * 440.0;
+
+            /* generate sin tone with 440Hz frequency and duplicated channels */
+            for (i = 0; i < samplesCount; i++)
             {
+                *dstp = Math.Sin(c * *toneLevel);
+                for (j = 1; j < channelsCount; j++)
+                    dstp[j] = dstp[0];
+                dstp += channelsCount;
+                *toneLevel += toneIncrement;
             }
         }
 
