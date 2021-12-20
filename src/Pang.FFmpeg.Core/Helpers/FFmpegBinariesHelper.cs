@@ -8,7 +8,7 @@ namespace Pang.FFmpeg.Core.Helpers
     {
         private const string LD_LIBRARY_PATH = "LD_LIBRARY_PATH";
 
-        internal static void RegisterFFmpegBinaries()
+        public static void RegisterFFmpegBinaries()
         {
             switch (Environment.OSVersion.Platform)
             {

@@ -25,7 +25,7 @@ namespace Pang.FFmpeg.Core.Helpers
         public static int ThrowExceptionIfError(this int error, string message)
         {
             if (error < 0)
-                throw new ApplicationException($"{av_strerror(error)} - [{message}]");
+                throw new ApplicationException($"[Pang.FFmpeg] - {error} - {av_strerror(error)} - [{message}]");
             return error;
         }
     }
