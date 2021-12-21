@@ -1,6 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using FFmpeg.AutoGen;
 
 namespace Pang.FFmpeg.Core.Extensions
 {
@@ -15,7 +17,7 @@ namespace Pang.FFmpeg.Core.Extensions
         {
             byte* res = (byte*)Marshal.AllocHGlobal(buffer.Length);
 
-            Marshal.AllocHGlobal(buffer.Length);
+            //Marshal.AllocHGlobal(buffer.Length);
 
             for (int i = 0; i < buffer.Length; i++)
             {

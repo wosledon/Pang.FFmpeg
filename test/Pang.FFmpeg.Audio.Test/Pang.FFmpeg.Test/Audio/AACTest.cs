@@ -64,9 +64,9 @@ namespace Pang.FFmpeg.Test.Audio
             FFmpegBinariesHelper.RegisterFFmpegBinaries();
 
             //todo:音频暂时先放下
-            ReadOnlySpan<byte> fileData = File.ReadAllBytes(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"Audio/Files/testpacket.pcm"));
+            ReadOnlySpan<byte> fileData = File.ReadAllBytes(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"Audio\Files\testpacket.pcm"));
             //注意 这里为了可以判断音频是否可用，因此使用adts，当网络传输的时候不应该使用adts
-            var faac = new AudioEncoder(8000, 1);
+            var faac = new AudioEncoder(8000, 1, needAdts: true);
             var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"Audio\Files\testpacket.aac");
             if (File.Exists(path)) File.Delete(path);
             output.WriteLine(path);
@@ -80,7 +80,10 @@ namespace Pang.FFmpeg.Test.Audio
                 var aacBuff = faac.Encode(fileData.Slice(offset, step).ToArray());
                 stopwatch.Stop();
                 if (aacBuff.Any())
+                {
+                    output.WriteLine($"input:{step} output:{aacBuff.Length}");
                     aacBuff.AppendBytesToFile(path);
+                }
                 offset += step;
                 totalBytes += aacBuff.Length;
             }
