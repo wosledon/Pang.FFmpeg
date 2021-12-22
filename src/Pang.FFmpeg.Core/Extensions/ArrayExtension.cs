@@ -27,6 +27,17 @@ namespace Pang.FFmpeg.Core.Extensions
             return res;
         }
 
+        public static byte[] ToArray(this IntPtr buffer, int bufferSize)
+        {
+            var res = new byte[bufferSize];
+            for (int i = 0; i < bufferSize; i++)
+            {
+                res[i] = ((byte*)buffer)[i];
+            }
+
+            return res;
+        }
+
         /// <summary>
         /// 判断是否为空或者长度为0
         /// </summary>
