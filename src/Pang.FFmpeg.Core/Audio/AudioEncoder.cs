@@ -104,7 +104,8 @@ namespace Pang.FFmpeg.Core.Audio
             //检查采样格式是否支持
             if (!AudioEncoderHelper.CheckSampleFormat(Codec, CodecContext->sample_fmt))
             {
-                AudioEncoderHelper.ThrowFFmpegAllocException(@$"Encoder does not support sample format: {ffmpeg.av_get_sample_fmt_name(CodecContext->sample_fmt)}");
+                AudioEncoderHelper
+                    .ThrowFFmpegAllocException(@$"Encoder does not support sample format: {ffmpeg.av_get_sample_fmt_name(CodecContext->sample_fmt)}");
             }
 
             // 设置采样率, 通道布局, 通道数
