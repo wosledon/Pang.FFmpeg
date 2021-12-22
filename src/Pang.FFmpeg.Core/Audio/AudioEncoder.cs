@@ -109,7 +109,8 @@ namespace Pang.FFmpeg.Core.Audio
 
             // 设置采样率, 通道布局, 通道数
             CodecContext->sample_rate = SampleRate;
-            CodecContext->channel_layout = AudioEncoderHelper.SelectChannelLayout(Codec);
+            //CodecContext->channel_layout = AudioEncoderHelper.SelectChannelLayout(Codec);
+            CodecContext->channel_layout = ffmpeg.AV_CH_LAYOUT_MONO;
             CodecContext->channels = ffmpeg.av_get_channel_layout_nb_channels(CodecContext->channel_layout);
 
             ffmpeg.avcodec_open2(CodecContext, Codec, null)
@@ -152,6 +153,9 @@ namespace Pang.FFmpeg.Core.Audio
             var outputCache = new List<byte>();
 
             byte* pcmBuffer = FrameCache.Take(FrameSize).ToArray().ToArrayPointer();
+            //using var audioConverter = new AudioConverter(CodecContext, ffmpeg.AV_CH_LAYOUT_MONO, SampleRate, InputSampleFormat);
+            //var convert = audioConverter.Convert(FrameCache.Take(FrameSize).ToArray());
+            //byte* pcmBuffer = convert.ToArrayPointer();
 
             byte* pcmTempBuffer = (byte*)Marshal.AllocHGlobal(FrameSize);
 
@@ -169,17 +173,23 @@ namespace Pang.FFmpeg.Core.Audio
                 ffmpeg.avcodec_fill_audio_frame(Frame, CodecContext->channels, OutputSampleFormat,
                     pcmBuffer, FrameSize, 0);
             }
-
             Pts += Frame->nb_samples;
             Frame->pts = Pts;
+            //Frame->data = new byte_ptrArray8
+            //{
+            //    [0] = pcmBuffer
+            //};
 
             #region 测试指针与数组互转是否成功
 
-            //var temp = new byte[FrameSize];
-            //Marshal.Copy(new IntPtr(pcmBuffer), temp, 0, FrameSize);
+            var temp = new byte[FrameSize];
+            Marshal.Copy(new IntPtr(pcmBuffer), temp, 0, FrameSize);
 
-            //var temp2 = new byte[FrameSize];
-            //Marshal.Copy(new IntPtr(pcmBuffer), temp2, 0, FrameSize);
+            var temp2 = new byte[FrameSize];
+            Marshal.Copy(new IntPtr(pcmBuffer), temp2, 0, FrameSize);
+
+            var temp3 = new byte[FrameSize];
+            Marshal.Copy(new IntPtr(Frame->data[0]), temp3, 0, FrameSize);
 
             #endregion 测试指针与数组互转是否成功
 
@@ -201,19 +211,8 @@ namespace Pang.FFmpeg.Core.Audio
                     break;
                 }
 
-                //if (NeedAdts)
-                //{
-                //    byte* aacHeader = (byte*)Marshal.AllocHGlobal(7);
-                //    GetAdtsHeader(CodecContext, aacHeader, Packet->size);
-                //    var header = new byte[7];
-                //    Marshal.Copy(new IntPtr(aacHeader), header, 0, 7);
-                //    outputCache.InsertRange(0, header);
-
-                //    Marshal.FreeHGlobal(new IntPtr(aacHeader));
-                //}
                 packetSize += Packet->size;
 
-                //outputCache.Add(new ReadOnlySpan<byte>(Packet->data, Packet->size).ToArray());
                 outputCache.AddRange(new ReadOnlySpan<byte>(Packet->data, Packet->size).ToArray());
                 FrameCache = FrameCache.Skip(FrameSize).ToList();
                 ffmpeg.av_packet_unref(Packet);
